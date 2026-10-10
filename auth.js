@@ -1,0 +1,81 @@
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+
+const users = [
+  {
+    id: "usr_31",
+    name: "Almaz",
+    phone: "0911000000",
+    passwordHash: bcrypt.hashSync("AddisEats123!", 10),
+    role: "customer",
+  },
+];
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
+
+  providers: [
+    Credentials({
+      credentials: {
+        phone: {},
+        password: {},
+      },
+
+      async authorize(credentials) {
+        const phone = credentials?.phone;
+        const password = credentials?.password;
+
+        if (
+          typeof phone !== "string" ||
+          typeof password !== "string"
+        ) {
+          return null;
+        }
+
+        const user = users.find((item) => item.phone === phone);
+
+        if (!user) {
+          return null;
+        }
+
+        const validPassword = await bcrypt.compare(
+          password,
+          user.passwordHash
+        );
+
+        if (!validPassword) {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          role: user.role,
+          phone: user.phone,
+        };
+      },
+    }),
+  ],
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = user.role;
+        token.phone = user.phone;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub;
+        session.user.role = token.role;
+        session.user.phone = token.phone;
+      }
+
+      return session;
+    },
+  },
+});

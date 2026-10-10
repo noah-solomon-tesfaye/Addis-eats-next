@@ -1,0 +1,311 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
+import AddToCartButton from "./AddToCartButton";
+
+const categories = [
+  { value: "all", label: "All Dishes" },
+  { value: "ethiopian", label: "Ethiopian" },
+  { value: "fasting", label: "Fasting" },
+  { value: "hot-drinks", label: "Hot Drinks" },
+  { value: "juice-smoothie", label: "Juice & Smoothie" },
+  { value: "burger", label: "Burger" },
+  { value: "pizza", label: "Pizza" },
+  { value: "pasta", label: "Pasta" },
+  { value: "soft-drinks", label: "Soft Drinks" },
+];
+
+export default function MenuBrowser() {
+  const [category, setCategory] = useState("all");
+  const [term, setTerm] = useState("");
+  const [debouncedTerm, setDebouncedTerm] = useState("");
+  const [page, setPage] = useState(1);
+
+  // Debounce live search.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedTerm(term.trim());
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [term]);
+
+  // Reset pagination directly when filters change.
+  function handleCategoryChange(value) {
+    setCategory(value);
+    setPage(1);
+  }
+
+  function handleSearchChange(value) {
+    setTerm(value);
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setTerm("");
+    setDebouncedTerm("");
+    setCategory("all");
+    setPage(1);
+  }
+
+  // Build the API request.
+  const query = new URLSearchParams({
+    category,
+    page: String(page),
+  });
+
+  if (debouncedTerm) {
+    query.set("q", debouncedTerm);
+  }
+
+  const { data, error, isLoading } = useSWR(
+    `/api/dishes?${query.toString()}`,
+    fetcher,
+    { keepPreviousData: true }
+  );
+
+  const dishes = data?.dishes ?? [];
+  const totalPages = data?.totalPages ?? 0;
+  const totalDishes = data?.total ?? 0;
+
+  const selectedCategory =
+    categories.find((item) => item.value === category)?.label ??
+    "All Dishes";
+
+  return (
+    <div className="w-full min-w-0">
+      {/* Search */}
+      <section className="mb-6 rounded-2xl border border-[#e9e2d7] bg-white p-4 shadow-sm sm:p-6">
+        <label
+          htmlFor="menu-live-search"
+          className="mb-2 block text-sm font-semibold text-[#29443a]"
+        >
+          Search dishes
+        </label>
+
+        <input
+          id="menu-live-search"
+          type="search"
+          value={term}
+          onChange={(event) => handleSearchChange(event.target.value)}
+          placeholder="Search by dish name or description..."
+          autoComplete="off"
+          className="min-h-12 w-full min-w-0 rounded-xl border border-[#e9e2d7] bg-[#faf8f3] px-4 py-3 text-sm text-[#242923] outline-none transition focus:border-[#a86f2b] focus:ring-2 focus:ring-[#a86f2b]/20"
+        />
+
+        {term && (
+          <button
+            type="button"
+            onClick={() => handleSearchChange("")}
+            className="mt-2 text-xs font-semibold text-[#365c49] hover:text-[#a86f2b]"
+          >
+            Clear search
+          </button>
+        )}
+      </section>
+
+      {/* Categories */}
+      <section className="mb-6 min-w-0 overflow-hidden rounded-2xl border border-[#e9e2d7] bg-white p-4 shadow-sm sm:p-5">
+        <h2 className="mb-3 text-lg font-bold text-[#29443a]">
+          Categories
+        </h2>
+
+        <div
+          className="flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-wrap lg:overflow-visible"
+          aria-label="Filter dishes by category"
+        >
+          {categories.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => handleCategoryChange(item.value)}
+              aria-pressed={category === item.value}
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a86f2b] ${
+                category === item.value
+                  ? "border-[#29443a] bg-[#29443a] text-white"
+                  : "border-[#e9e2d7] bg-white text-[#29443a] hover:bg-[#f3ede3]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Results heading */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl font-bold text-[#29443a]">
+          {selectedCategory}
+        </h2>
+
+        {data && (
+          <p className="text-sm text-[#777970]" aria-live="polite">
+            {totalDishes} {totalDishes === 1 ? "dish" : "dishes"} found
+          </p>
+        )}
+      </div>
+
+      {/* Loading */}
+      {isLoading && !data && (
+        <p className="py-10 text-center text-sm text-[#777970]" role="status">
+          Loading dishes...
+        </p>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
+          Could not load dishes. Please try again.
+        </div>
+      )}
+
+      {/* Dish cards */}
+      {!error && data && dishes.length > 0 && (
+        <>
+          <div
+            className={`grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4 ${
+              isLoading ? "opacity-60" : ""
+            }`}
+            aria-busy={isLoading}
+          >
+            {dishes.map((dish, index) => (
+              <article
+                key={dish.id}
+                className="group min-w-0 overflow-hidden rounded-2xl border border-[#e9e2d7] bg-white shadow-sm transition duration-300 hover:shadow-lg hover:shadow-[#51412b]/10 sm:hover:-translate-y-1"
+              >
+                <div className="relative aspect-[4/3] overflow-hidden bg-[#eee7dc]">
+                  <Image
+                    src={dish.image}
+                    alt={dish.name}
+                    width={600}
+                    height={400}
+                    sizes="(max-width: 419px) 100vw, (max-width: 639px) 50vw, (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 25vw"
+                    priority={index === 0}
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                  />
+
+                  {dish.discountPer > 0 && (
+                    <span className="absolute left-2 top-2 rounded-full bg-[#fffdf9]/95 px-2.5 py-1 text-xs font-bold text-[#946326] shadow-sm sm:left-3 sm:top-3">
+                      {dish.discountPer}% off
+                    </span>
+                  )}
+
+                  {dish.isFasting && (
+                    <span className="absolute bottom-2 left-2 rounded-full bg-[#e8eee8]/95 px-2.5 py-1 text-xs font-semibold text-[#365c49] sm:bottom-3 sm:left-3">
+                      Fasting friendly
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-3 sm:p-4 lg:p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="min-w-0 break-words text-base font-bold text-[#29332c] sm:text-lg">
+                      {dish.name}
+                    </h3>
+
+                    <span className="max-w-[48%] shrink-0 rounded-lg bg-[#f4f0e8] px-2 py-1 text-[10px] leading-4 text-[#65675f] sm:text-xs">
+                      {dish.spiceLevel}
+                    </span>
+                  </div>
+
+                  <p className="mt-2 line-clamp-3 min-h-[60px] text-xs leading-5 text-[#777970] sm:mt-3 sm:min-h-[72px] sm:text-sm sm:leading-6">
+                    {dish.description}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#eee7dc] pt-3 sm:mt-4 sm:pt-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#29443a] sm:text-base lg:text-lg">
+                        {dish.price.toLocaleString("en-US")} ETB
+                      </p>
+
+                      {dish.discountPer > 0 && (
+                        <p className="mt-1 text-[10px] leading-4 text-[#946326] sm:text-xs">
+                          {dish.discountPer}% discount available
+                        </p>
+                      )}
+                    </div>
+
+                    <Link
+                      href={`/menu/${dish.id}`}
+                      className="inline-flex min-h-10 items-center rounded-lg text-xs font-semibold text-[#365c49] transition hover:text-[#a86f2b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a86f2b] sm:text-sm"
+                    >
+                      View details →
+                    </Link>
+                  </div>
+
+                  <div className="mt-3 sm:mt-4">
+                    <AddToCartButton dish={dish} />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <nav
+              aria-label="Dish pagination"
+              className="mt-8 flex flex-wrap items-center justify-center gap-3"
+            >
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => {
+                  setPage((current) => Math.max(1, current - 1));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="min-h-11 rounded-full border border-[#e9e2d7] px-4 py-2 text-sm font-semibold text-[#29443a] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+
+              <span className="text-sm text-[#777970]" aria-live="polite">
+                Page {page} of {totalPages}
+              </span>
+
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => {
+                  setPage((current) => Math.min(totalPages, current + 1));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="min-h-11 rounded-full border border-[#e9e2d7] px-4 py-2 text-sm font-semibold text-[#29443a] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </nav>
+          )}
+        </>
+      )}
+
+      {/* Empty results */}
+      {!error && data && dishes.length === 0 && (
+        <div className="rounded-2xl border border-[#e9e2d7] bg-white px-4 py-12 text-center">
+          <p className="text-lg font-semibold text-[#29443a]">
+            No dishes found
+          </p>
+
+          <p className="mt-2 text-sm text-[#777970]">
+            Try another search or category.
+          </p>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="mt-4 min-h-11 rounded-full bg-[#29443a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1d332a]"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
