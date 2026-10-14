@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "../../lib/session";
 import { getOrdersForUser } from "../../lib/orders";
+import { formatRelativeTime } from "../../lib/format";
+import ExportOrdersButton from "./ExportOrdersButton";
 
 export const metadata = {
   title: "My Orders",
@@ -22,11 +24,14 @@ function formatDate(value) {
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  if (Number.isNaN(date.getTime())) {
+    return "Date unavailable";
+  }
 
   return date.toLocaleString("en-ET", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Africa/Addis_Ababa",
   });
 }
 
@@ -37,11 +42,17 @@ function getStatusStyles(status) {
     return "bg-green-100 text-green-800";
   }
 
-  if (["cancelled", "canceled", "failed"].includes(normalizedStatus)) {
+  if (
+    ["cancelled", "canceled", "failed"].includes(normalizedStatus)
+  ) {
     return "bg-red-100 text-red-800";
   }
 
-  if (["preparing", "ready", "out_for_delivery"].includes(normalizedStatus)) {
+  if (
+    ["preparing", "ready", "out_for_delivery"].includes(
+      normalizedStatus
+    )
+  ) {
     return "bg-amber-100 text-amber-900";
   }
 
@@ -59,12 +70,15 @@ function formatStatus(status) {
 export default async function OrdersPage() {
   const session = await getSession();
 
+  // Require authentication.
   if (!session?.user?.id) {
     redirect("/signin?next=%2Forders");
   }
 
-  const orders = getOrdersForUser(session.user.id);
+  // Retrieve only this customer's orders.
+  const orders = await getOrdersForUser(session.user.id);
 
+  // Sort orders from newest to oldest.
   const sortedOrders = [...orders].sort((a, b) => {
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
@@ -75,6 +89,7 @@ export default async function OrdersPage() {
   return (
     <main className="min-h-[70vh]">
       <section className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        {/* Page heading */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-[#a86f2b]">
@@ -98,6 +113,7 @@ export default async function OrdersPage() {
           </Link>
         </div>
 
+        {/* Empty order history */}
         {sortedOrders.length === 0 ? (
           <div className="rounded-3xl border border-[#e9e2d7] bg-white px-5 py-12 text-center shadow-sm sm:px-10">
             <div
@@ -112,8 +128,8 @@ export default async function OrdersPage() {
             </h2>
 
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73766f]">
-              Your orders will appear here after you place your first order.
-              Explore the menu and find something delicious.
+              Your orders will appear here after you place your first
+              order. Explore the menu and find something delicious.
             </p>
 
             <Link
@@ -125,21 +141,31 @@ export default async function OrdersPage() {
           </div>
         ) : (
           <div className="space-y-5">
-            <p className="text-sm text-[#73766f]" aria-live="polite">
-              {sortedOrders.length}{" "}
-              {sortedOrders.length === 1 ? "order" : "orders"} found
-            </p>
+            {/* Order count and CSV export */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-[#73766f]" aria-live="polite">
+                {sortedOrders.length}{" "}
+                {sortedOrders.length === 1 ? "order" : "orders"} found
+              </p>
 
+              <ExportOrdersButton orders={sortedOrders} />
+            </div>
+
+            {/* Order cards */}
             {sortedOrders.map((order) => {
               const orderId = order.id;
               const status = order.status || "pending";
-              const items = Array.isArray(order.items) ? order.items : [];
+
+              const items = Array.isArray(order.items)
+                ? order.items
+                : [];
 
               return (
                 <article
                   key={orderId}
                   className="overflow-hidden rounded-2xl border border-[#e9e2d7] bg-white shadow-sm transition hover:shadow-md"
                 >
+                  {/* Order ID, date, relative time, and status */}
                   <div className="flex flex-col gap-4 border-b border-[#e9e2d7] p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-[#73766f]">
@@ -153,6 +179,10 @@ export default async function OrdersPage() {
                       <p className="mt-1 text-sm text-[#73766f]">
                         {formatDate(order.createdAt)}
                       </p>
+
+                      <p className="mt-1 text-xs text-[#73766f]">
+                        {formatRelativeTime(order.createdAt)}
+                      </p>
                     </div>
 
                     <span
@@ -162,6 +192,7 @@ export default async function OrdersPage() {
                     </span>
                   </div>
 
+                  {/* Order items */}
                   <div className="space-y-3 p-5 sm:px-6">
                     <h3 className="text-sm font-semibold text-[#242923]">
                       Order summary
@@ -171,7 +202,10 @@ export default async function OrdersPage() {
                       <ul className="space-y-2">
                         {items.map((item, index) => (
                           <li
-                            key={item.id || `${item.name || "item"}-${index}`}
+                            key={
+                              item.id ||
+                              `${item.name || "item"}-${index}`
+                            }
                             className="flex items-start justify-between gap-4 text-sm"
                           >
                             <span className="min-w-0 text-[#73766f]">
@@ -195,9 +229,13 @@ export default async function OrdersPage() {
                     )}
                   </div>
 
+                  {/* Order total and tracking link */}
                   <div className="flex flex-col gap-4 bg-[#faf8f3] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div>
-                      <p className="text-xs text-[#73766f]">Order total</p>
+                      <p className="text-xs text-[#73766f]">
+                        Order total
+                      </p>
+
                       <p className="mt-1 text-lg font-bold text-[#29443a]">
                         {formatPrice(order.total)}
                       </p>

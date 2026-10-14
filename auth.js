@@ -5,10 +5,24 @@ import bcrypt from "bcryptjs";
 const users = [
   {
     id: "usr_31",
-    name: "Almaz",
+    name: "Abi",
     phone: "0911000000",
     passwordHash: bcrypt.hashSync("AddisEats123!", 10),
     role: "customer",
+  },
+  {
+    id: "usr_admin",
+    name: "Addis Eats Admin",
+    phone: "0900000000",
+    passwordHash: bcrypt.hashSync("AdminChangeMe123!", 10),
+    role: "admin",
+  },
+  {
+    id: "usr_staff",
+    name: "Addis Eats Kitchen Staff",
+    phone: "0912000000",
+    passwordHash: bcrypt.hashSync("KitchenChangeMe123!", 10),
+    role: "staff",
   },
 ];
 

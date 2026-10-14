@@ -4,6 +4,8 @@ import {
   cancelOrderForUser,
 } from "../../../../lib/orders";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request, { params }) {
   const session = await getSession();
 
@@ -15,11 +17,12 @@ export async function GET(request, { params }) {
   }
 
   const { id } = await params;
-  const order = getOrderForUser(id, session.user.id);
+
+  const order = await getOrderForUser(id, session.user.id);
 
   if (!order) {
     return Response.json(
-      { error: "Order not found" },
+      { error: "Order not found." },
       { status: 404 }
     );
   }
@@ -27,7 +30,7 @@ export async function GET(request, { params }) {
   return Response.json(order);
 }
 
-export async function DELETE(request, { params }) {
+export async function PATCH(request, { params }) {
   const session = await getSession();
 
   if (!session?.user?.id) {
@@ -38,11 +41,30 @@ export async function DELETE(request, { params }) {
   }
 
   const { id } = await params;
-  const order = cancelOrderForUser(id, session.user.id);
+
+  let body;
+
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json(
+      { error: "Invalid JSON request body." },
+      { status: 400 }
+    );
+  }
+
+  if (body?.action !== "cancel") {
+    return Response.json(
+      { error: "Unsupported order action." },
+      { status: 400 }
+    );
+  }
+
+  const order = await cancelOrderForUser(id, session.user.id);
 
   if (!order) {
     return Response.json(
-      { error: "Order not found" },
+      { error: "Order not found." },
       { status: 404 }
     );
   }

@@ -3,70 +3,151 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
+  useSyncExternalStore,
 } from "react";
 
 const CartContext = createContext(null);
 
 const CART_STORAGE_KEY = "addis-eats-cart";
 
-function getInitialCart() {
-  if (typeof window === "undefined") {
-    return [];
+const EMPTY_CART = Object.freeze([]);
+
+let cartSnapshot = EMPTY_CART;
+let lastStoredValue;
+let initialized = false;
+
+const listeners = new Set();
+
+function validateCart(items) {
+  if (!Array.isArray(items)) {
+    return EMPTY_CART;
   }
 
+  return items.filter(
+    (item) =>
+      item &&
+      typeof item.id === "string" &&
+      typeof item.name === "string" &&
+      Number.isFinite(item.price) &&
+      item.price >= 0 &&
+      Number.isInteger(item.quantity) &&
+      item.quantity > 0
+  );
+}
+
+function initializeCart() {
+  if (initialized || typeof window === "undefined") {
+    return;
+  }
+
+  initialized = true;
+
   try {
-    const savedCart = localStorage.getItem(CART_STORAGE_KEY);
+    const storedValue = window.localStorage.getItem(CART_STORAGE_KEY);
+    lastStoredValue = storedValue;
 
-    if (!savedCart) {
-      return [];
+    if (storedValue) {
+      cartSnapshot = validateCart(JSON.parse(storedValue));
+    } else {
+      cartSnapshot = EMPTY_CART;
     }
-
-    const parsedCart = JSON.parse(savedCart);
-
-    if (!Array.isArray(parsedCart)) {
-      return [];
-    }
-
-    return parsedCart.filter(
-      (item) =>
-        item &&
-        typeof item.id === "string" &&
-        typeof item.name === "string" &&
-        Number.isFinite(item.price) &&
-        item.price >= 0 &&
-        Number.isInteger(item.quantity) &&
-        item.quantity > 0
-    );
-  } catch {
-    return [];
+  } catch (error) {
+    console.error("Unable to restore cart:", error);
+    cartSnapshot = EMPTY_CART;
   }
 }
 
-export function Providers({ children }) {
-  const [cart, setCart] = useState(getInitialCart);
+function getSnapshot() {
+  initializeCart();
+  return cartSnapshot;
+}
 
-  // Persist cart changes in the browser.
-  useEffect(() => {
-    try {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
-    } catch (error) {
-      console.error("Unable to save cart:", error);
+function getServerSnapshot() {
+  return EMPTY_CART;
+}
+
+function notifyListeners() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function handleStorage(event) {
+  if (
+    event.key !== CART_STORAGE_KEY &&
+    event.key !== null
+  ) {
+    return;
+  }
+
+  initialized = false;
+  initializeCart();
+  notifyListeners();
+}
+
+function subscribe(listener) {
+  listeners.add(listener);
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+  }
+
+  return () => {
+    listeners.delete(listener);
+
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
     }
-  }, [cart]);
+  };
+}
+
+function updateCart(updater) {
+  initializeCart();
+
+  const nextCart = updater(cartSnapshot);
+
+  // Keep the snapshot stable if nothing changed.
+  if (nextCart === cartSnapshot) {
+    return;
+  }
+
+  cartSnapshot = nextCart;
+
+  try {
+    const serializedCart = JSON.stringify(cartSnapshot);
+
+    window.localStorage.setItem(
+      CART_STORAGE_KEY,
+      serializedCart
+    );
+
+    lastStoredValue = serializedCart;
+  } catch (error) {
+    console.error("Unable to save cart:", error);
+  }
+
+  notifyListeners();
+}
+
+export function Providers({ children }) {
+  const cart = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot
+  );
 
   function addToCart(dish) {
     if (
       !dish ||
       typeof dish.id !== "string" ||
+      typeof dish.name !== "string" ||
       !Number.isFinite(dish.price) ||
       dish.price < 0
     ) {
       return;
     }
 
-    setCart((currentCart) => {
+    updateCart((currentCart) => {
       const existingItem = currentCart.find(
         (item) => item.id === dish.id
       );
@@ -74,7 +155,10 @@ export function Providers({ children }) {
       if (existingItem) {
         return currentCart.map((item) =>
           item.id === dish.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+              }
             : item
         );
       }
@@ -90,21 +174,27 @@ export function Providers({ children }) {
   }
 
   function increaseQuantity(dishId) {
-    setCart((currentCart) =>
+    updateCart((currentCart) =>
       currentCart.map((item) =>
         item.id === dishId
-          ? { ...item, quantity: item.quantity + 1 }
+          ? {
+              ...item,
+              quantity: item.quantity + 1,
+            }
           : item
       )
     );
   }
 
   function decreaseQuantity(dishId) {
-    setCart((currentCart) =>
+    updateCart((currentCart) =>
       currentCart
         .map((item) =>
           item.id === dishId
-            ? { ...item, quantity: item.quantity - 1 }
+            ? {
+                ...item,
+                quantity: item.quantity - 1,
+              }
             : item
         )
         .filter((item) => item.quantity > 0)
@@ -112,13 +202,13 @@ export function Providers({ children }) {
   }
 
   function removeFromCart(dishId) {
-    setCart((currentCart) =>
+    updateCart((currentCart) =>
       currentCart.filter((item) => item.id !== dishId)
     );
   }
 
   function clearCart() {
-    setCart([]);
+    updateCart(() => EMPTY_CART);
   }
 
   const cartCount = cart.reduce(
@@ -153,7 +243,9 @@ export function useCart() {
   const context = useContext(CartContext);
 
   if (!context) {
-    throw new Error("useCart must be used inside Providers");
+    throw new Error(
+      "useCart must be used inside Providers"
+    );
   }
 
   return context;

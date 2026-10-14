@@ -6,6 +6,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import AddToCartButton from "./AddToCartButton";
+import CategoryBar from "./CategoryBar";
 
 const categories = [
   { value: "all", label: "All Dishes" },
@@ -19,13 +20,16 @@ const categories = [
   { value: "soft-drinks", label: "Soft Drinks" },
 ];
 
-export default function MenuBrowser() {
-  const [category, setCategory] = useState("all");
+export default function MenuBrowser({
+  initialDishes = [],
+  category = "all",
+  onCategoryChange,
+}) {
   const [term, setTerm] = useState("");
   const [debouncedTerm, setDebouncedTerm] = useState("");
   const [page, setPage] = useState(1);
 
-  // Debounce live search.
+  // Debounce search input to avoid requesting the API on every keystroke.
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedTerm(term.trim());
@@ -34,9 +38,8 @@ export default function MenuBrowser() {
     return () => clearTimeout(timer);
   }, [term]);
 
-  // Reset pagination directly when filters change.
   function handleCategoryChange(value) {
-    setCategory(value);
+    onCategoryChange?.(value);
     setPage(1);
   }
 
@@ -48,11 +51,11 @@ export default function MenuBrowser() {
   function clearFilters() {
     setTerm("");
     setDebouncedTerm("");
-    setCategory("all");
+    onCategoryChange?.("all");
     setPage(1);
   }
 
-  // Build the API request.
+  // Request dishes for every category, including All Dishes.
   const query = new URLSearchParams({
     category,
     page: String(page),
@@ -65,12 +68,17 @@ export default function MenuBrowser() {
   const { data, error, isLoading } = useSWR(
     `/api/dishes?${query.toString()}`,
     fetcher,
-    { keepPreviousData: true }
+    {
+      keepPreviousData: true,
+    }
   );
 
-  const dishes = data?.dishes ?? [];
-  const totalPages = data?.totalPages ?? 0;
-  const totalDishes = data?.total ?? 0;
+  // Use API results when available; retain initial server-rendered dishes
+  // as a fallback while data is loading.
+  const dishes = data?.dishes ?? initialDishes;
+  const totalPages =
+    data?.totalPages ?? Math.ceil(initialDishes.length / 6);
+  const totalDishes = data?.total ?? initialDishes.length;
 
   const selectedCategory =
     categories.find((item) => item.value === category)?.label ??
@@ -78,6 +86,15 @@ export default function MenuBrowser() {
 
   return (
     <div className="w-full min-w-0">
+      {/* Mobile category filters */}
+      <div className="mb-5 lg:hidden">
+        <CategoryBar
+          selectedCategory={category}
+          onCategoryChange={handleCategoryChange}
+          mobile
+        />
+      </div>
+
       {/* Search */}
       <section className="mb-6 rounded-2xl border border-[#e9e2d7] bg-white p-4 shadow-sm sm:p-6">
         <label
@@ -108,55 +125,25 @@ export default function MenuBrowser() {
         )}
       </section>
 
-      {/* Categories */}
-      <section className="mb-6 min-w-0 overflow-hidden rounded-2xl border border-[#e9e2d7] bg-white p-4 shadow-sm sm:p-5">
-        <h2 className="mb-3 text-lg font-bold text-[#29443a]">
-          Categories
-        </h2>
-
-        <div
-          className="flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-wrap lg:overflow-visible"
-          aria-label="Filter dishes by category"
-        >
-          {categories.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => handleCategoryChange(item.value)}
-              aria-pressed={category === item.value}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a86f2b] ${
-                category === item.value
-                  ? "border-[#29443a] bg-[#29443a] text-white"
-                  : "border-[#e9e2d7] bg-white text-[#29443a] hover:bg-[#f3ede3]"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
       {/* Results heading */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-bold text-[#29443a]">
           {selectedCategory}
         </h2>
 
-        {data && (
-          <p className="text-sm text-[#777970]" aria-live="polite">
-            {totalDishes} {totalDishes === 1 ? "dish" : "dishes"} found
-          </p>
-        )}
+        <p className="text-sm text-[#777970]" aria-live="polite">
+          {totalDishes} {totalDishes === 1 ? "dish" : "dishes"} found
+        </p>
       </div>
 
-      {/* Loading */}
-      {isLoading && !data && (
-        <p className="py-10 text-center text-sm text-[#777970]" role="status">
-          Loading dishes...
+      {/* Loading state */}
+      {isLoading && (
+        <p className="py-3 text-center text-sm text-[#777970]" role="status">
+          Updating dishes...
         </p>
       )}
 
-      {/* Error */}
+      {/* Error state */}
       {error && (
         <div
           className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
@@ -167,10 +154,10 @@ export default function MenuBrowser() {
       )}
 
       {/* Dish cards */}
-      {!error && data && dishes.length > 0 && (
+      {!error && dishes.length > 0 && (
         <>
           <div
-            className={`grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4 ${
+            className={`grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:gap-5 lg:grid-cols-2 xl:grid-cols-3 ${
               isLoading ? "opacity-60" : ""
             }`}
             aria-busy={isLoading}
@@ -186,8 +173,9 @@ export default function MenuBrowser() {
                     alt={dish.name}
                     width={600}
                     height={400}
-                    sizes="(max-width: 419px) 100vw, (max-width: 639px) 50vw, (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 25vw"
-                    priority={index === 0}
+                    sizes="(max-width: 419px) calc(100vw - 32px), (max-width: 639px) 50vw, (max-width: 1023px) 50vw, (max-width: 1279px) 40vw, 33vw"
+                    loading={index === 0 ? "eager" : "lazy"}
+                    fetchPriority={index === 0 ? "high" : "auto"}
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />
 
@@ -204,7 +192,7 @@ export default function MenuBrowser() {
                   )}
                 </div>
 
-                <div className="p-3 sm:p-4 lg:p-5">
+                <div className="p-3 sm:p-4">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="min-w-0 break-words text-base font-bold text-[#29332c] sm:text-lg">
                       {dish.name}
@@ -221,7 +209,7 @@ export default function MenuBrowser() {
 
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#eee7dc] pt-3 sm:mt-4 sm:pt-4">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#29443a] sm:text-base lg:text-lg">
+                      <p className="text-sm font-bold text-[#29443a] sm:text-base">
                         {dish.price.toLocaleString("en-US")} ETB
                       </p>
 
@@ -286,8 +274,8 @@ export default function MenuBrowser() {
         </>
       )}
 
-      {/* Empty results */}
-      {!error && data && dishes.length === 0 && (
+      {/* Empty state */}
+      {!error && !isLoading && dishes.length === 0 && (
         <div className="rounded-2xl border border-[#e9e2d7] bg-white px-4 py-12 text-center">
           <p className="text-lg font-semibold text-[#29443a]">
             No dishes found

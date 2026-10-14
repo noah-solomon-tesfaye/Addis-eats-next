@@ -15,6 +15,7 @@ export default function CheckoutForm({ customerName = "" }) {
 
   const [name, setName] = useState(customerName);
   const [phone, setPhone] = useState("");
+  const [neighbourhood, setNeighbourhood] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,6 +25,11 @@ export default function CheckoutForm({ customerName = "" }) {
 
     if (cart.length === 0) {
       setError("Your cart is empty. Please add dishes before checking out.");
+      return;
+    }
+
+    if (neighbourhood.trim().length < 2) {
+      setError("Please enter your delivery neighbourhood.");
       return;
     }
 
@@ -38,6 +44,7 @@ export default function CheckoutForm({ customerName = "" }) {
         body: JSON.stringify({
           name,
           phone,
+          neighbourhood: neighbourhood.trim(),
           items: cart.map((item) => ({
             id: item.id,
             quantity: item.quantity,
@@ -117,6 +124,37 @@ export default function CheckoutForm({ customerName = "" }) {
             className="min-h-12 w-full rounded-xl border border-[#e9e2d7] px-4 py-3 outline-none transition focus:border-[#a86f2b] focus:ring-2 focus:ring-[#a86f2b]/20"
             placeholder="Your phone number"
           />
+        </div>
+
+        <div>
+          <label
+            htmlFor="neighbourhood"
+            className="mb-2 block text-sm font-semibold text-[#29443a]"
+          >
+            Delivery neighbourhood
+          </label>
+
+          <input
+            id="neighbourhood"
+            name="neighbourhood"
+            type="text"
+            autoComplete="address-level3"
+            minLength={2}
+            maxLength={100}
+            required
+            value={neighbourhood}
+            onChange={(event) => setNeighbourhood(event.target.value)}
+            className="min-h-12 w-full rounded-xl border border-[#e9e2d7] px-4 py-3 outline-none transition focus:border-[#a86f2b] focus:ring-2 focus:ring-[#a86f2b]/20"
+            placeholder="Enter your neighbourhood"
+            aria-describedby="neighbourhood-help"
+          />
+
+          <p
+            id="neighbourhood-help"
+            className="mt-2 text-xs leading-5 text-[#73766f]"
+          >
+            Enter the neighbourhood where your order should be delivered.
+          </p>
         </div>
 
         {error && (
