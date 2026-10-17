@@ -1,0 +1,39 @@
+﻿/* Addis Eats dark theme */
+[data-theme="dark"] {
+  --background: #171a17;
+  --foreground: #f1f3ee;
+
+  --primary: #e0ad68;
+  --primary-hover: #f0c58d;
+  --secondary: #b5d1bd;
+
+  --surface: #222722;
+  --surface-muted: #30372f;
+
+  --border: #3b443b;
+  --muted: #b1b8ae;
+}
+
+html:has([data-theme="dark"]) body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+[data-theme="dark"] header,
+[data-theme="dark"] footer {
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--surface);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--muted);
+}
